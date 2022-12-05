@@ -8,7 +8,7 @@ import { IAxelarGateway } from '@axelar-network/axelar-gmp-sdk-solidity/contract
 import { IAxelarGasService } from '@axelar-network/axelar-gmp-sdk-solidity/contracts/interfaces/IAxelarGasService.sol';
 import { IERC20 } from '@axelar-network/axelar-gmp-sdk-solidity/contracts/interfaces/IERC20.sol';
 import { Secp256k1 } from './crypto/Secp256k1.sol';
-import "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
+import { ECDSA } from "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
 
 
 contract Controller is AxelarExecutable {
@@ -17,23 +17,14 @@ contract Controller is AxelarExecutable {
     bytes4 constant internal MAGICVALUE = 0x1626ba7e;
 
 
-    struct Message {
-        uint64 nonce;
-        bytes pubKey;
-    }
-
-
     using StringToAddress for string;
     using AddressToString for address;
-
 
     string private localChain;
     address private masterSigner;
     address private masterContract;
 
-
     uint64 public nonce = 0;
-
 
     mapping(bytes32 => bytes) public signatures;
 
@@ -44,9 +35,17 @@ contract Controller is AxelarExecutable {
     }
 
 
-    modifier sentWithMasterSignature(uint64 memory nonce_, bytes memory publicKey_, bytes memory signature_) {
+    modifier sentWithMasterSignature(bytes32 hash_, bytes memory signature_) {
         require(this.nonce_ == nonce, 'Invalid nonce');
-        require(Secp256k1.verify(abi.encode(nonce_), publicKey_, signature_), 'Not a master signature');
+
+        (address recovered, ECDSA.RecoverError error) = Secp256k1.tryRecover(hash_, signature_, 27);
+
+        if (error == ECDSA.RecoverError.NoError && recovered != signer) {
+            (recovered, error) = tryRecover(hash_, signature_, 28);
+        }
+
+        require(error == ECDSA.RecoverError.NoError && recovered == this.masterSigner, 'Not a master signature');
+
         _;
     }
 
@@ -94,10 +93,9 @@ contract Controller is AxelarExecutable {
         string calldata destinationChain_,
         string calldata destinationAddress_,
         bytes calldata payload_,
-        uint64 memory nonce_, 
-        bytes memory publicKey_, 
+        uint64 memory hash_, 
         bytes memory signature_
-    ) external payable  sentWithMasterSignature(nonce_, publicKey_,  signature_) {
+    ) external payable  sentWithMasterSignature(hash_, signature_) {
         call(destinationChain_, destinationAddress_, payload_)
     }
 
@@ -126,7 +124,10 @@ contract Controller is AxelarExecutable {
             }
             gateway.callContract(destinationChain, destinationAddress, wrappedPayload);
         }
+
+        this.nonce += 1;
     }
+
 
     function addSignatureFromContract(
         string calldata destinationChain_,
@@ -141,17 +142,26 @@ contract Controller is AxelarExecutable {
     function addSignatureWithSignature(
         string calldata destinationChain_,
         string calldata destinationAddress_,
-        bytes32 memory verificationHash_,
-        bytes memory verificationSignature_,
+
         bytes32 memory storeHash_,
         bytes memory storeSignature_,
 
-        uint64 memory nonce_, 
-        bytes memory publicKey_, 
+        uint64 memory hash_, 
         bytes memory signature_
 
-    ) external payable  sentWithMasterSignature(nonce_, publicKey) {
+    ) external payable  sentWithMasterSignature(hash, signature_) {
         saveSignature(destinationChain_, destinationAddress_, storeHash_, storeSignature_)
+    }
+
+    function addSignatureFromSignature(
+        string calldata destinationChain_,
+        string calldata destinationAddress_,
+
+        uint64 memory hash_, 
+        bytes memory signature_
+
+    ) external payable  sentWithMasterSignature(hash, signature_) {
+        saveSignature(destinationChain_, destinationAddress_, hash_, signature_)
     }
 
 
@@ -204,37 +214,5 @@ contract Controller is AxelarExecutable {
         }
     }
 
-
-    function recoverSigner(
-        bytes32 calldata _hash,
-        bytes calldata _signature
-    ) internal pure returns (address signer) {
-        require(_signature.length == 65, "SignatureValidator#recoverSigner: invalid signature length");
-
-        // Variables are not scoped in Solidity.
-        uint8 v = uint8(_signature[64]);
-        bytes32 r = _signature.readBytes32(0);
-        bytes32 s = _signature.readBytes32(32);
-
-
-        if (uint256(s) > 0x7FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF5D576E7357A4501DDFE92F46681B20A0) {
-            revert("SignatureValidator#recoverSigner: invalid signature 's' value");
-        }
-
-        if (v != 27 && v != 28) {
-            revert("SignatureValidator#recoverSigner: invalid signature 'v' value");
-        }
-
-        // Recover ECDSA signer
-        signer = ecrecover(_hash, v, r, s);
-        
-        // Prevent signer from being 0x0
-        require(
-            signer != address(0x0),
-            "SignatureValidator#recoverSigner: INVALID_SIGNER"
-        );
-
-        return signer;
-  }
 
 }

@@ -7,6 +7,8 @@ import { AxelarExecutable } from '@axelar-network/axelar-gmp-sdk-solidity/contra
 import { IAxelarGateway } from '@axelar-network/axelar-gmp-sdk-solidity/contracts/interfaces/IAxelarGateway.sol';
 import { IAxelarGasService } from '@axelar-network/axelar-gmp-sdk-solidity/contracts/interfaces/IAxelarGasService.sol';
 import { IERC20 } from '@axelar-network/axelar-gmp-sdk-solidity/contracts/interfaces/IERC20.sol';
+import { Secp256k1 } from './crypto/Secp256k1.sol';
+import "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
 
 
 contract Controller is AxelarExecutable {
@@ -18,7 +20,6 @@ contract Controller is AxelarExecutable {
     struct Message {
         uint64 nonce;
         bytes pubKey;
-        bytes32
     }
 
 
@@ -37,14 +38,15 @@ contract Controller is AxelarExecutable {
     mapping(bytes32 => bytes) public signatures;
 
 
-
     modifier sentByMasterContract() {
         require(msg.sender == this.masterContract, 'Only a master contract can use this method');
         _;
     }
 
-    modifier sentWithMasterSignature(hash_: bytes32, signature_ : bytes) {
-        require(recoverSigner(hash_, signature_) == this.masterSigner, 'Not a master signature');
+
+    modifier sentWithMasterSignature(uint64 memory nonce_, bytes memory publicKey_, bytes memory signature_) {
+        require(this.nonce_ == nonce, 'Invalid nonce');
+        require(Secp256k1.verify(abi.encode(nonce_), publicKey_, signature_), 'Not a master signature');
         _;
     }
 
@@ -92,9 +94,10 @@ contract Controller is AxelarExecutable {
         string calldata destinationChain_,
         string calldata destinationAddress_,
         bytes calldata payload_,
-        bytes32 calldata hash_,
-        bytes calldata signature_
-    ) external payable  sentWithMasterSignature(hash_, signature_) {
+        uint64 memory nonce_, 
+        bytes memory publicKey_, 
+        bytes memory signature_
+    ) external payable  sentWithMasterSignature(nonce_, publicKey_,  signature_) {
         call(destinationChain_, destinationAddress_, payload_)
     }
 
@@ -128,20 +131,27 @@ contract Controller is AxelarExecutable {
     function addSignatureFromContract(
         string calldata destinationChain_,
         string calldata destinationAddress_,
-        bytes calldata payload_,
+        bytes32 calldata hash_,
+        bytes calldata signature_
     ) external payable {
-        call(destinationChain_, destinationAddress_, payload_)
+        saveSignature(destinationChain_, destinationAddress_, hash_, signature_)
     }
 
 
     function addSignatureWithSignature(
         string calldata destinationChain_,
         string calldata destinationAddress_,
-        bytes calldata payload_,
-        bytes32 calldata hash_,
-        bytes calldata signature_
-    ) external payable  sentWithMasterSignature(hash_, signature_) {
-        call(destinationChain_, destinationAddress_, payload_)
+        bytes32 memory verificationHash_,
+        bytes memory verificationSignature_,
+        bytes32 memory storeHash_,
+        bytes memory storeSignature_,
+
+        uint64 memory nonce_, 
+        bytes memory publicKey_, 
+        bytes memory signature_
+
+    ) external payable  sentWithMasterSignature(nonce_, publicKey) {
+        saveSignature(destinationChain_, destinationAddress_, storeHash_, storeSignature_)
     }
 
 

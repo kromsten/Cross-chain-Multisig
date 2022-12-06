@@ -7,6 +7,7 @@ import { IAxelarGateway } from '@axelar-network/axelar-gmp-sdk-solidity/contract
 import { IAxelarGasService } from '@axelar-network/axelar-gmp-sdk-solidity/contracts/interfaces/IAxelarGasService.sol';
 import { IERC20 } from '@axelar-network/axelar-gmp-sdk-solidity/contracts/interfaces/IERC20.sol';
 
+
 contract Deputy is AxelarExecutable {
     string public value;
     string private controllerChain;
@@ -41,8 +42,20 @@ contract Deputy is AxelarExecutable {
         string calldata sourceAddress_,
         bytes calldata payload_
     ) internal override onlyController(sourceChain_, sourceAddress_)  {
-        (_hash, _signature) = abi.decode(payload_, (bytes32, bytes));
-        signatures[_hash] = signature;
+
+        (call, innerPayload) = abi.decode(payload_, (bool, bytes));
+
+        if (call) {
+
+            (value, to, data) = abi.decode(innerPayload, (uint, address, bytes)
+            to.call{ value: msg.value }(data);
+
+        } else {
+
+            (_hash, _signature) = abi.decode(innerPayload, (bytes32, bytes));
+            signatures[_hash] = signature;
+
+        }
     }
 
 
@@ -58,7 +71,7 @@ contract Deputy is AxelarExecutable {
 
      function equals(string memory a, string memory b) public pure returns (bool) {
         if(bytes(a).length != bytes(b).length) {
-        r   eturn false;
+            return false;
         } else {
             return keccak256(abi.encodePacked(a)) == keccak256(abi.encodePacked(b));
         }

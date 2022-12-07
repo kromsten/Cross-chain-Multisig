@@ -8,18 +8,24 @@ type Participant = {
 
 
 type CreationData = {
+    lurkers: any[]; 
     participants: Participant[],
     selected: number[],
 }
 
-
-type Selection = {
-  signer: Participant,
-  selected: number,
+type Selections = {
+  selections: number[];
+  from: Participant
 }
 
+type Presence = {
+  id : string,
+  present: boolean
+}
+
+
 const DefaultCreationData : CreationData = {
-    participants: [], selected: []
+  lurkers: [], participants: [], selected: []
 }
 
 
@@ -30,35 +36,53 @@ const validSignature = (newPart : Participant) : boolean => {
 
 class Creation {
   private readonly name: string = "multisig_creation";
-  private readonly newParticipant: string = "new_participant";
-  private readonly newSelection: string = "new_selection";
+  private readonly participants: string = "participants";
+  private readonly selections: string = "selections";
+  private readonly lurkers: string = "lurkers";
+
 
   private dataStore: Writable<CreationData>;
-  private selectionStore: Writable<number[]>;
 
   private data : CreationData;
-  private selected : number[]
 
   constructor() {
 
     this.dataStore = writable(DefaultCreationData);
-    this.selectionStore = writable([]);
 
     this.data = DefaultCreationData;
-    this.selected = [];
 
     this.dataStore.subscribe(data => {
       this.data = data
-    })
-    this.selectionStore.subscribe(data => {
-      this.selected = data;
     })
     
 
     const got = gun.get(this.name)
 
-    got.get(this.newParticipant).on((newPart : Participant, key : string) => {
-       
+
+    got.get(this.lurkers).on((presence: Presence) => {   
+      if (!this.data.lurkers.includes(presence.id) && presence.present) {
+
+        this.dataStore.set({
+            ...this.data, 
+            lurkers: [
+                ...this.data.lurkers,
+                presence.id
+            ]
+        })
+
+      } else if (!presence.present) {
+
+        this.dataStore.set({
+          ...this.data, 
+            lurkers: this.data.lurkers.filter(id => presence.id !== id)
+        })
+
+      }
+
+    })
+
+
+    got.get(this.participants).on((newPart : Participant) => {   
       if (!this.signExists(newPart) && validSignature(newPart)) {
         this.dataStore.set({
             ...this.data, 
@@ -70,16 +94,19 @@ class Creation {
       }
     })
 
-    got.get(this.newSelection).on((selection : Selection, key : string) => {
-       
-      if (this.data.participants[0].publicKey == selection.signer.publicKey 
-        && validSignature(selection.signer)) {
-        
+
+    got.get(this.selections).on((data: Selections) => {
+      if (this.data.participants[0].publicKey == data.from.publicKey 
+        && validSignature(data.from)) {
+        this.dataStore.set({
+          ...this.data, 
+          selected: data.selections
+        })
       }
     })
-
-
   }
+
+
 
   subscribe(callBack : (val : any) => void) {
     return this.dataStore.subscribe(callBack)

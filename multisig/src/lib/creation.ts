@@ -1,6 +1,7 @@
 import gun from "./gun";
 import { writable, type Writable } from 'svelte/store'
 
+
 type Participant = {
     publicKey: string;
     signature: any;
@@ -34,11 +35,14 @@ const validSignature = (newPart : Participant) : boolean => {
 }
 
 
+
+
+
 class Creation {
-  private readonly name: string = "multisig_creation";
-  private readonly participants: string = "participants";
-  private readonly selections: string = "selections";
-  private readonly lurkers: string = "lurkers";
+  private readonly name: string = "wabadubadums";
+  
+  private readonly participants: string = "participantss";
+  private readonly selections: string = "selectionss";
 
 
   private dataStore: Writable<CreationData>;
@@ -59,30 +63,12 @@ class Creation {
     const got = gun.get(this.name)
 
 
-    got.get(this.lurkers).on((presence: Presence) => {   
-      if (!this.data.lurkers.includes(presence.id) && presence.present) {
 
-        this.dataStore.set({
-            ...this.data, 
-            lurkers: [
-                ...this.data.lurkers,
-                presence.id
-            ]
-        })
+    got.get(this.participants).map((newPart : Participant) => {   
 
-      } else if (!presence.present) {
-
-        this.dataStore.set({
-          ...this.data, 
-            lurkers: this.data.lurkers.filter(id => presence.id !== id)
-        })
-
-      }
-
-    })
+      console.log("got part:", newPart);
 
 
-    got.get(this.participants).on((newPart : Participant) => {   
       if (!this.signExists(newPart) && validSignature(newPart)) {
         this.dataStore.set({
             ...this.data, 
@@ -95,7 +81,7 @@ class Creation {
     })
 
 
-    got.get(this.selections).on((data: Selections) => {
+    got.get(this.selections).map((data: Selections) => {
       if (this.data.participants[0].publicKey == data.from.publicKey 
         && validSignature(data.from)) {
         this.dataStore.set({
@@ -121,6 +107,53 @@ class Creation {
     return this.data.participants
             .findIndex(p => p.publicKey === part.publicKey) !== -1
   }
+
+
+
+
+
+  private registerLurkers (presence : any) {  
+      
+    console.log("got presence:", presence);
+
+    console.log("conditions::", !this.data.lurkers.includes(presence.id), presence.present);
+
+
+    if (!this.data.lurkers.includes(presence.id) && presence.present) {
+
+      console.log("about to add new presence:")
+
+
+      const newData = {...this.data, 
+        lurkers: [
+            ...this.data.lurkers,
+            presence.id
+        ]};
+
+      this.dataStore.set({
+          ...this.data, 
+          lurkers: [
+              ...this.data.lurkers,
+              presence.id
+          ]
+      })
+
+      console.log("supposed to be added now", newData)
+
+
+
+    } else if (!presence.present) {
+
+      this.dataStore.set({
+        ...this.data, 
+          lurkers: this.data.lurkers.filter(id => presence.id !== id)
+      })
+
+    }
+
+  }
 }
 
-export const counter = new Creation()
+
+const creationStore = new Creation()
+export default creationStore

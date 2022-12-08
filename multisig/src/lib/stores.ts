@@ -1,4 +1,4 @@
-import { writable, type Writable } from 'svelte/store'
+/* import { writable, type Writable } from 'svelte/store'
 import type { IGunInstance } from "gun/types/gun/"
 import Gun from "gun/gun"
 
@@ -35,4 +35,4 @@ class Signatures {
   }
 }
 
-export const counter = new Signatures('multiSignatures')
+export const counter = new Signatures('multiSignatures') */
